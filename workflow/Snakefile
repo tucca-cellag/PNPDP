@@ -20,7 +20,32 @@ rule all:
         "results/analysis_summary.txt",
 
 
-rule resolve_accessions:
+rule split_queries:
+    input:
+        queries=query_fasta,
+    output:
+        expand(f"resources/query_shards/shard_{{i}}.faa", i=range(num_shards)),
+        done=f"resources/query_shards/.split_done",
+    log:
+        "logs/split_queries.log",
+    params:
+        num_shards=num_shards,
+        results_dir=lambda wc, input, output: os.path.dirname(output.done),
+        awk_script=lambda wc, input, output: f'BEGIN{{n=0}} /^>/{{f=sprintf("{os.path.dirname(output.done)}/shard_%d.faa",n++%{num_shards});}} {{print > f}}',
+    conda:
+        "envs/entrez-blast.yaml"
+    shell:
+        """
+        (echo "Starting query splitting..." && \
+        echo "Splitting {input.queries} into {params.num_shards} shards" && \
+        awk '{params.awk_script}' {input.queries} && \
+        echo "Creating completion flag..." && \
+        touch {output.done} && \
+        echo "Query splitting completed") 2> {log}
+        """
+
+
+checkpoint resolve_accessions:
     input:
         csv=species_csv,
     output:
@@ -34,12 +59,21 @@ rule resolve_accessions:
         "envs/ncbi-datasets.yaml"
     shell:
         """
-        python workflow/scripts/resolve_accessions.py \
+        (set -Eeuo pipefail; \
+        echo "[$(date -Is)] Starting resolve_accessions"; \
+        echo "Host: $(hostname)"; \
+        echo "Species CSV: {input.csv}"; \
+        echo "Status out: {output.status}"; \
+        echo "Accessions out: {output.accessions}"; \
+        echo "Download info out: {output.download_info}"; \
+        echo "Threads: {threads}"; \
+        PYTHONUNBUFFERED=1 python -u workflow/scripts/resolve_accessions.py \
         --species {input.csv} \
         --status {output.status} \
         --accessions {output.accessions} \
         --download-info {output.download_info} \
-        --max-workers {threads} 2> {log}
+        --max-workers {threads}; \
+        echo "[$(date -Is)] Finished resolve_accessions") &> {log}
         """
 
 
@@ -49,50 +83,62 @@ rule download_proteome:
         download_info="resources/download_info.csv",
     output:
         proteome="resources/proteomes/{acc}.faa.gz",
+        dataset_zip="resources/proteome_zips/{acc}.zip",
     wildcard_constraints:
-        acc=r"GCF_\d+\.\d+",
+        acc=r"(GCF|GCA)_\d+\.\d+",
     log:
         "logs/download_proteome/{acc}.log",
-    params:
-        genome_asc=lambda wildcards: wildcards.acc,
     conda:
         "envs/ncbi-datasets.yaml"
     message:
         "Downloading proteome for NCBI genome accession: {wildcards.acc}"
     shell:
         """
-        (datasets download genome accession {params.genome_asc} \
+        (echo "Starting download for {wildcards.acc}" && \
+        mkdir -pv ./resources/proteomes/ && \
+        echo "Downloading proteome data..." && \
+        datasets download genome accession {wildcards.acc} \
             --include protein \
-            --filename {params.genome_asc}.zip && \
-        unzip -p {params.genome_asc}.zip ncbi_dataset/data/{params.genome_asc}/protein.faa | \
+            --filename {output.dataset_zip} && \
+        echo "Extracting protein sequences..." && \
+        unzip -p {output.dataset_zip} resources/proteomes/{wildcards.acc}_protein.faa | \
         gzip > {output.proteome} && \
-        rm {params.genome_asc}.zip) &> {log}
+        echo "Download completed for {wildcards.acc}") &> {log}
         """
+
+
+def get_proteome_files(wildcards):
+    """Read accessions file from checkpoint and return list of proteome files"""
+    ckpt = checkpoints.resolve_accessions.get()
+    with open(ckpt.output.accessions) as f:
+        accessions = [line.strip() for line in f if line.strip()]
+    return expand("resources/proteomes/{acc}.faa.gz", acc=accessions)
 
 
 rule concat_proteomes:
     input:
-        status="resources/species_status.csv",
-        accs="resources/accessions.txt",
+        proteomes=get_proteome_files,
     output:
         fasta="resources/blast_db/all_species_proteomes.faa",
+        done="resources/blast_db/.concat_done",
     log:
         "logs/concat_proteomes.log",
     params:
-        blast_db_dir=lambda wc, input, output: os.path.dirname(output.fasta),
-        accessions_file=lambda wc, input, output: input.accs,
+        length=lambda wildcards, input: len(input.proteomes),
     conda:
         "envs/entrez-blast.yaml"
     shell:
         """
-        (mkdir -p {params.blast_db_dir} && \
-        for acc in $(cat {params.accessions_file}); do \
-            if [ -f "resources/proteomes/$acc.faa.gz" ]; then \
-                gunzip -c "resources/proteomes/$acc.faa.gz" >> {output.fasta}; \
-            else \
-                echo "Warning: Proteome file resources/proteomes/$acc.faa.gz not found" >&2; \
-            fi; \
-        done) 2> {log}
+        (echo "Starting proteome concatenation..." && \
+        mkdir -p "resources/blast_db" && \
+        echo "Concatenating {params.length} proteome files..." && \
+        for proteome in {input.proteomes}; do \
+            echo "Processing: $proteome" && \
+            gunzip -c "$proteome" >> {output.fasta}; \
+        done && \
+        echo "Creating completion flag..." && \
+        touch {output.done} && \
+        echo "Proteome concatenation completed") 2> {log}
         """
 
 
@@ -120,27 +166,6 @@ rule makeblastdb:
         "v7.6.1/bio/blast/makeblastdb"
 
 
-rule split_queries:
-    input:
-        queries=query_fasta,
-    output:
-        expand(f"resources/query_shards/shard_{{i}}.faa", i=range(num_shards)),
-        done=f"resources/query_shards/.split_done",
-    log:
-        "logs/split_queries.log",
-    params:
-        num_shards=num_shards,
-        results_dir=lambda wc, input, output: os.path.dirname(output.done),
-        awk_script=lambda wc, input, output: f'BEGIN{{n=0}} /^>/{{f=sprintf("{os.path.dirname(output.done)}/shard_%d.faa",n++%{num_shards});}} {{print > f}}',
-    conda:
-        "envs/entrez-blast.yaml"
-    shell:
-        """
-        (awk '{params.awk_script}' {input.queries} && \
-        touch {output.done}) 2> {log}
-        """
-
-
 rule blastp:
     input:
         shard=f"resources/query_shards/shard_{{i}}.faa",
@@ -156,10 +181,15 @@ rule blastp:
         "envs/entrez-blast.yaml"
     shell:
         """
-        (blastp -query {input.shard} -db {params.blast_db_dir}/species_db \
+        (echo "Starting BLAST search for shard {wildcards.i}" && \
+        echo "Query file: {input.shard}" && \
+        echo "Database: {params.blast_db_dir}/species_db" && \
+        echo "Output file: {output.tsv}" && \
+        blastp -query {input.shard} -db {params.blast_db_dir}/species_db \
             -out {output.tsv} -outfmt '6 qseqid sseqid pident length mismatch \
             gapopen qstart qend sstart send evalue bitscore stitle' \
-            -evalue 1e-5 -num_threads {threads}) 2> {log}
+            -evalue 1e-5 -num_threads {threads} && \
+        echo "BLAST search completed for shard {wildcards.i}") 2> {log}
         """
 
 
@@ -173,12 +203,18 @@ rule aggregate:
         summary="results/analysis_summary.txt",
     log:
         "logs/aggregate.log",
+    params:
+        length=len({input.shards}),
     conda:
         "envs/py.yaml"
     shell:
         """
-        (cat {input.shards} > {output.results} && \
+        (echo "Starting result aggregation..." && \
+        echo "Concatenating {params.length} BLAST result files..." && \
+        cat {input.shards} > {output.results} && \
+        echo "Running analysis script..." && \
         python workflow/scripts/analyze.py \
             --status {input.status} --blast {output.results} \
-            --summary {output.summary} --hits {output.hits}) 2> {log}
+            --summary {output.summary} --hits {output.hits} && \
+        echo "Analysis completed successfully") 2> {log}
         """
