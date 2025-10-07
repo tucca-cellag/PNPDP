@@ -151,6 +151,81 @@ The workflow will:
 - Submit jobs to SLURM using your configured profile
 - Run BLAST jobs in parallel across multiple nodes
 
+### Running Interactively on HPC
+
+To run the workflow interactively while ensuring it continues after 
+disconnection, use one of these methods:
+
+#### Method 1: Using `screen` (Recommended)
+
+```bash
+# Start a new screen session
+screen -S snakemake_workflow
+
+# Run the workflow
+snakemake --profile profiles/slurm
+
+# Detach from screen: Press Ctrl+A, then D
+# To reattach later: screen -r snakemake_workflow
+```
+
+#### Method 2: Using `tmux`
+
+```bash
+# Start a new tmux session
+tmux new-session -s snakemake_workflow
+
+# Run the workflow
+snakemake --profile profiles/slurm
+
+# Detach from tmux: Press Ctrl+B, then D
+# To reattach later: tmux attach-session -t snakemake_workflow
+```
+
+#### Method 3: Using `nohup` (Simple but less interactive)
+
+```bash
+# Run with nohup to prevent termination on disconnect
+nohup snakemake --profile profiles/slurm > workflow.log 2>&1 &
+
+# Monitor progress
+tail -f workflow.log
+```
+
+#### Method 4: Submit as SLURM Job (Most Robust)
+
+Create a job script `run_workflow.sh`:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=snakemake_workflow
+#SBATCH --partition=batch
+#SBATCH --account=your_account
+#SBATCH --time=72:00:00
+#SBATCH --mem=8G
+#SBATCH --cpus-per-task=4
+
+# Load modules if needed
+module load conda
+
+# Activate conda environment
+eval "$(conda shell.bash hook)"
+conda activate snakemake
+
+# Run the workflow
+snakemake --profile profiles/slurm
+```
+
+Then submit:
+
+```bash
+sbatch run_workflow.sh
+```
+
+**Recommendation**: Use Method 1 (screen) or Method 4 (SLURM job) for
+long-running workflows. Screen allows interactive monitoring, while
+SLURM jobs are more robust for very long runs.
+
 ### Customizing SLURM Resources
 
 Edit `profiles/slurm/config.v8+.yaml` to adjust:
