@@ -1,0 +1,11 @@
+# Input files
+species_csv: "resources/species.csv" # CSV file with species names (must have "Accepted name" column)
+query_fasta: "resources/amp.fasta" # FASTA file containing query sequences to search
+
+# Parallelization settings
+num_shards: 8 # Number of query shards for parallel BLAST jobs (higher = more parallelization)
+threads_per_blast: 8 # Number of CPUs per BLAST job
+
+# Species resolution (NCBI API calls)
+resolve_accessions_threads: 5 # Conservative for API rate limits
+

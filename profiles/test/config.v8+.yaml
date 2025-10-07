@@ -1,0 +1,15 @@
+# profiles/test/config.v8+.yaml
+
+# Profile Settings
+# To learn more see:
+# https://snakemake.readthedocs.io/en/stable/executing/cli.html
+use-conda: true
+conda-cleanup-pkgs: tarballs
+verbose: true
+show-failed-logs: true
+retries: 3
+rerun-incomplete: true
+keep-going: true
+jobs: 100
+latency-wait: 120
+cores: 4

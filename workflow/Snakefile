@@ -1,0 +1,184 @@
+import os
+import yaml
+
+
+# Allow configfile to be overridden via environment variable
+configfile: os.environ.get("SNAKEMAKE_CONFIG", "config/config.yaml")
+
+
+with open(os.environ.get("SNAKEMAKE_CONFIG", "config/config.yaml")) as f:
+    cfg = yaml.safe_load(f)
+
+species_csv = cfg["species_csv"]
+query_fasta = cfg["query_fasta"]
+num_shards = int(cfg.get("num_shards", 8))
+threads_per_blast = int(cfg.get("threads_per_blast", 8))
+
+
+rule all:
+    input:
+        "results/analysis_summary.txt",
+
+
+rule resolve_accessions:
+    input:
+        csv=species_csv,
+    output:
+        status="resources/species_status.csv",
+        accessions="resources/accessions.txt",
+        download_info="resources/download_info.csv",
+    log:
+        "logs/resolve_accessions.log",
+    threads: lambda wc, input: int(cfg.get("resolve_accessions_threads", 3))
+    conda:
+        "envs/ncbi-datasets.yaml"
+    shell:
+        """
+        python workflow/scripts/resolve_accessions.py \
+        --species {input.csv} \
+        --status {output.status} \
+        --accessions {output.accessions} \
+        --download-info {output.download_info} \
+        --max-workers {threads} 2> {log}
+        """
+
+
+rule download_proteome:
+    input:
+        accs="resources/accessions.txt",
+        download_info="resources/download_info.csv",
+    output:
+        proteome="resources/proteomes/{acc}.faa.gz",
+    wildcard_constraints:
+        acc=r"GCF_\d+\.\d+",
+    log:
+        "logs/download_proteome/{acc}.log",
+    params:
+        genome_asc=lambda wildcards: wildcards.acc,
+    conda:
+        "envs/ncbi-datasets.yaml"
+    message:
+        "Downloading proteome for NCBI genome accession: {wildcards.acc}"
+    shell:
+        """
+        (datasets download genome accession {params.genome_asc} \
+            --include protein \
+            --filename {params.genome_asc}.zip && \
+        unzip -p {params.genome_asc}.zip ncbi_dataset/data/{params.genome_asc}/protein.faa | \
+        gzip > {output.proteome} && \
+        rm {params.genome_asc}.zip) &> {log}
+        """
+
+
+rule concat_proteomes:
+    input:
+        status="resources/species_status.csv",
+        accs="resources/accessions.txt",
+    output:
+        fasta="resources/blast_db/all_species_proteomes.faa",
+    log:
+        "logs/concat_proteomes.log",
+    params:
+        blast_db_dir=lambda wc, input, output: os.path.dirname(output.fasta),
+        accessions_file=lambda wc, input, output: input.accs,
+    conda:
+        "envs/entrez-blast.yaml"
+    shell:
+        """
+        (mkdir -p {params.blast_db_dir} && \
+        for acc in $(cat {params.accessions_file}); do \
+            if [ -f "resources/proteomes/$acc.faa.gz" ]; then \
+                gunzip -c "resources/proteomes/$acc.faa.gz" >> {output.fasta}; \
+            else \
+                echo "Warning: Proteome file resources/proteomes/$acc.faa.gz not found" >&2; \
+            fi; \
+        done) 2> {log}
+        """
+
+
+rule makeblastdb:
+    input:
+        fasta="resources/blast_db/all_species_proteomes.faa",
+    output:
+        multiext(
+            "resources/blast_db/species_db",
+            ".pdb",
+            ".phr",
+            ".pin",
+            ".pot",
+            ".psq",
+            ".ptf",
+            ".pto",
+        ),
+    log:
+        "logs/makeblastdb.log",
+    params:
+        '-input_type fasta -blastdb_version 5 -title "Custom Species Proteome Database"',
+    conda:
+        "envs/entrez-blast.yaml"
+    wrapper:
+        "v7.6.1/bio/blast/makeblastdb"
+
+
+rule split_queries:
+    input:
+        queries=query_fasta,
+    output:
+        expand(f"resources/query_shards/shard_{{i}}.faa", i=range(num_shards)),
+        done=f"resources/query_shards/.split_done",
+    log:
+        "logs/split_queries.log",
+    params:
+        num_shards=num_shards,
+        results_dir=lambda wc, input, output: os.path.dirname(output.done),
+        awk_script=lambda wc, input, output: f'BEGIN{{n=0}} /^>/{{f=sprintf("{os.path.dirname(output.done)}/shard_%d.faa",n++%{num_shards});}} {{print > f}}',
+    conda:
+        "envs/entrez-blast.yaml"
+    shell:
+        """
+        (awk '{params.awk_script}' {input.queries} && \
+        touch {output.done}) 2> {log}
+        """
+
+
+rule blastp:
+    input:
+        shard=f"resources/query_shards/shard_{{i}}.faa",
+        dbpin=f"resources/blast_db/species_db.pin",
+    output:
+        tsv=temp(f"resources/blast_results/shard_{{i}}.tsv"),
+    log:
+        f"logs/blastp/shard_{{i}}.log",
+    threads: threads_per_blast
+    params:
+        blast_db_dir=lambda wc, input, output: os.path.dirname(input.dbpin),
+    conda:
+        "envs/entrez-blast.yaml"
+    shell:
+        """
+        (blastp -query {input.shard} -db {params.blast_db_dir}/species_db \
+            -out {output.tsv} -outfmt '6 qseqid sseqid pident length mismatch \
+            gapopen qstart qend sstart send evalue bitscore stitle' \
+            -evalue 1e-5 -num_threads {threads}) 2> {log}
+        """
+
+
+rule aggregate:
+    input:
+        shards=expand(f"resources/blast_results/shard_{{i}}.tsv", i=range(num_shards)),
+        status="resources/species_status.csv",
+    output:
+        results="results/blast_results.tsv",
+        hits="results/species_with_hits.csv",
+        summary="results/analysis_summary.txt",
+    log:
+        "logs/aggregate.log",
+    conda:
+        "envs/py.yaml"
+    shell:
+        """
+        (cat {input.shards} > {output.results} && \
+        python workflow/scripts/analyze.py \
+            --status {input.status} --blast {output.results} \
+            --summary {output.summary} --hits {output.hits}) 2> {log}
+        """

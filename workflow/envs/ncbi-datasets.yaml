@@ -1,0 +1,10 @@
+name: ncbi_datasets
+channels:
+  - bioconda
+  - conda-forge
+  - nodefaults
+dependencies:
+  - ncbi-datasets-cli
+  - jq
+  - python
+  - pandas

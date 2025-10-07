@@ -1,0 +1,10 @@
+name: entrez-blast
+channels:
+  - bioconda
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.9
+  - pandas
+  - entrez-direct
+  - blast

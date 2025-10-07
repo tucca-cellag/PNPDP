@@ -1,0 +1,25 @@
+# profiles/slurm/config.v8+.yaml
+# Configured for exclusive use with snakemake-executor-plugin-slurm
+
+# Profile Settings
+# To learn more see:
+# https://snakemake.readthedocs.io/en/stable/executing/cli.html
+executor: slurm
+use-conda: true
+conda-cleanup-pkgs: tarballs
+verbose: true
+show-failed-logs: true
+retries: 3
+rerun-incomplete: true
+jobs: 100 # Slurm jobscript size limit
+latency-wait: 120
+default-resources:
+  slurm_partition: "batch"
+  slurm_account: "default"
+  runtime: 4320
+  mem_mb: 32000
+  cpus_per_task: 12
+  # Change the following email address to your own email address if you would
+  # like this workflow to notify you via email of started/failed/completed
+  # slurm jobs
+  slurm_extra: '"--mail-type=ALL --mail-user=firstname.lastname@tufts.edu"'

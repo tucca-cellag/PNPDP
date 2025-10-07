@@ -1,0 +1,4 @@
+species_csv: ".test/species.csv"
+query_fasta: ".test/amp.fasta"
+num_shards: 8
+threads_per_blast: 4
