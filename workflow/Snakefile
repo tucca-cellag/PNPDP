@@ -47,7 +47,7 @@ checkpoint resolve_accessions:
         download_info="resources/download_info.csv",
     log:
         "logs/resolve_accessions.log",
-    threads: lambda wc, input: int(cfg.get("resolve_accessions_threads", 3))
+    threads: lambda wc, input: int(config.get("resolve_accessions_threads", 3))
     conda:
         "envs/ncbi-datasets.yaml"
     shell:
@@ -70,12 +70,11 @@ checkpoint resolve_accessions:
         """
 
 
-rule download_proteome:
+rule datasets_download_proteome:
     input:
         accs="resources/accessions.txt",
         download_info="resources/download_info.csv",
     output:
-        proteome="resources/proteomes/{acc}.faa.gz",
         dataset_zip="resources/proteome_zips/{acc}.zip",
     wildcard_constraints:
         acc=r"(GCF|GCA)_\d+\.\d+",
@@ -88,29 +87,51 @@ rule download_proteome:
     shell:
         """
         (echo "Starting download for {wildcards.acc}" && \
-        mkdir -pv ./resources/proteomes/ && \
+        mkdir -pv ./resources/proteome_zips/ && \
         echo "Downloading proteome data..." && \
         datasets download genome accession {wildcards.acc} \
             --include protein \
             --filename {output.dataset_zip} && \
-        echo "Extracting protein sequences..." && \
-        unzip -p {output.dataset_zip} resources/proteomes/{wildcards.acc}_protein.faa | \
-        gzip > {output.proteome} && \
         echo "Download completed for {wildcards.acc}") &> {log}
         """
 
 
-def get_proteome_files(wildcards):
-    """Read accessions file from checkpoint and return list of proteome files"""
-    ckpt = checkpoints.resolve_accessions.get()
-    with open(ckpt.output.accessions) as f:
-        accessions = [line.strip() for line in f if line.strip()]
-    return expand("resources/proteomes/{acc}.faa.gz", acc=accessions)
+rule extract_proteome:
+    input:
+        dataset_zip="resources/proteome_zips/{acc}.zip",
+    output:
+        proteome="resources/proteomes/{acc}.faa.gz",
+    wildcard_constraints:
+        acc=r"(GCF|GCA)_\d+\.\d+",
+    log:
+        "logs/extract_proteome/{acc}.log",
+    conda:
+        "envs/ncbi-datasets.yaml"
+    message:
+        "Extracting proteome for NCBI genome accession: {wildcards.acc}"
+    shell:
+        """
+        (echo "Starting extraction for {wildcards.acc}" && \
+        mkdir -pv ./resources/proteomes/ && \
+        echo "Extracting protein sequences..." && \
+        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/{wildcards.acc}_protein.faa | \
+        gzip > {output.proteome} && \
+        echo "Extraction completed for {wildcards.acc}") &> {log}
+        """
 
 
 rule concat_proteomes:
     input:
-        proteomes=get_proteome_files,
+        proteomes=lambda wildcards: expand(
+            "resources/proteomes/{acc}.faa.gz",
+            acc=[
+                line.strip()
+                for line in open(
+                    checkpoints.resolve_accessions.get().output.accessions
+                )
+                if line.strip()
+            ],
+        ),
     output:
         fasta="resources/blast_db/all_species_proteomes.faa",
         done="resources/blast_db/.concat_done",
