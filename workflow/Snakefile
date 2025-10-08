@@ -6,6 +6,7 @@ species_csv = config["species_csv"]
 query_fasta = config["query_fasta"]
 num_shards = int(config.get("num_shards", 8))
 threads_per_blast = int(config.get("threads_per_blast", 8))
+ncbi_api_key = os.environ.get("NCBI_API_KEY")
 
 
 rule all:
@@ -80,6 +81,10 @@ rule datasets_download_proteome:
         acc=r"(GCF|GCA)_\d+\.\d+",
     log:
         "logs/download_proteome/{acc}.log",
+    params:
+        api_key_flag=lambda wc, input, output: (
+            f"--api-key {ncbi_api_key}" if ncbi_api_key else ""
+        ),
     conda:
         "envs/ncbi-datasets.yaml"
     message:
@@ -91,7 +96,8 @@ rule datasets_download_proteome:
         echo "Downloading proteome data..." && \
         datasets download genome accession {wildcards.acc} \
             --include protein \
-            --filename {output.dataset_zip} && \
+            --filename {output.dataset_zip} \
+            {params.api_key_flag} && \
         echo "Download completed for {wildcards.acc}") &> {log}
         """
 
