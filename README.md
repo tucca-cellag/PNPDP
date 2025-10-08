@@ -153,10 +153,28 @@ The workflow will:
 
 ### Running Interactively on HPC
 
-To run the workflow interactively while ensuring it continues after 
+To run the workflow interactively while ensuring it continues after
 disconnection, use one of these methods:
 
-#### Method 1: Using `screen` (Recommended)
+**Note for Tufts HPC users**: On Tufts HPC login nodes, `screen` sessions may be
+terminated when you disconnect. `tmux` sessions persist across disconnects and
+are recommended. See Tufts RT Guides: Tmux
+(`https://rtguides.it.tufts.edu/hpc/application/30-tmux.html`).
+
+#### Method 1: Using `tmux` (Recommended for Tufts HPC)
+
+```bash
+# Start a new tmux session
+tmux new-session -s snakemake_workflow
+
+# Run the workflow
+snakemake --profile profiles/slurm
+
+# Detach from tmux: Press Ctrl+B, then D
+# To reattach later: tmux attach-session -t snakemake_workflow
+```
+
+#### Method 2: Using `screen`
 
 ```bash
 # Start a new screen session
@@ -169,18 +187,9 @@ snakemake --profile profiles/slurm
 # To reattach later: screen -r snakemake_workflow
 ```
 
-#### Method 2: Using `tmux`
-
-```bash
-# Start a new tmux session
-tmux new-session -s snakemake_workflow
-
-# Run the workflow
-snakemake --profile profiles/slurm
-
-# Detach from tmux: Press Ctrl+B, then D
-# To reattach later: tmux attach-session -t snakemake_workflow
-```
+On Tufts HPC, be aware that `screen` sessions can be killed on disconnect. Prefer
+`tmux` if you need persistence across network drops
+(`https://rtguides.it.tufts.edu/hpc/application/30-tmux.html`).
 
 #### Method 3: Using `nohup` (Simple but less interactive)
 
@@ -222,9 +231,9 @@ Then submit:
 sbatch run_workflow.sh
 ```
 
-**Recommendation**: Use Method 1 (screen) or Method 4 (SLURM job) for
-long-running workflows. Screen allows interactive monitoring, while
-SLURM jobs are more robust for very long runs.
+**Recommendation**: Use Method 1 (tmux) or Method 4 (SLURM job) for long-running
+workflows. Tmux allows interactive monitoring with persistence across
+disconnects, while SLURM jobs are more robust for very long runs.
 
 ### Customizing SLURM Resources
 
@@ -232,9 +241,9 @@ Edit `profiles/slurm/config.v8+.yaml` to adjust:
 
 - `slurm_partition`: SLURM partition name (default: "batch")
 - `slurm_account`: SLURM account name (default: "default")
-- `runtime`: Job time limit in minutes (default: 4320)
-- `mem_mb`: Memory per job in MB (default: 32000)
-- `cpus_per_task`: CPUs per job (default: 12)
+- `runtime`: Job time limit in minutes (default: 1440)
+- `mem_mb`: Memory per job in MB (default: 8000)
+- `cpus_per_task`: CPUs per job (default: 4)
 - `slurm_extra`: Additional SLURM flags (email notifications, etc.)
 - `jobs`: Maximum concurrent jobs (default: 100)
 - `latency_wait`: Wait time for files in seconds (default: 120)
