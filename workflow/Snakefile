@@ -114,7 +114,7 @@ rule extract_proteome:
         (echo "Starting extraction for {wildcards.acc}" && \
         mkdir -pv ./resources/proteomes/ && \
         echo "Extracting protein sequences..." && \
-        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/{wildcards.acc}_protein.faa | \
+        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/protein.faa | \
         gzip > {output.proteome} && \
         echo "Extraction completed for {wildcards.acc}") &> {log}
         """
