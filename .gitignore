@@ -223,3 +223,4 @@ workflow/notebooks/.ipynb_checkpoints/**
 # Project
 *.xlsx
 .vscode/settings.json
+cache/**

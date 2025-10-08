@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import logging
 import shlex
+import hashlib
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +19,47 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S%z",
 )
 logger = logging.getLogger(__name__)
+
+# Cache directory for datasets results
+CACHE_DIR = Path("cache/datasets_results")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def get_cache_key(search_term, cmd_type):
+    """Generate a cache key for a search term and command type"""
+    # Create a hash of the search term and command type
+    key_string = f"{search_term}_{cmd_type}"
+    return hashlib.md5(key_string.encode()).hexdigest()
+
+
+def get_cached_result(search_term, cmd_type):
+    """Get cached result if it exists"""
+    cache_key = get_cache_key(search_term, cmd_type)
+    cache_file = CACHE_DIR / f"{cache_key}.json"
+
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r") as f:
+                cached_data = json.load(f)
+                logger.debug(f"Cache hit for {search_term} ({cmd_type})")
+                return cached_data
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Failed to read cache file {cache_file}: {e}")
+            return None
+    return None
+
+
+def cache_result(search_term, cmd_type, result_data):
+    """Cache the result data"""
+    cache_key = get_cache_key(search_term, cmd_type)
+    cache_file = CACHE_DIR / f"{cache_key}.json"
+
+    try:
+        with open(cache_file, "w") as f:
+            json.dump(result_data, f, indent=2)
+        logger.debug(f"Cached result for {search_term} ({cmd_type})")
+    except IOError as e:
+        logger.warning(f"Failed to write cache file {cache_file}: {e}")
 
 
 def get_ncbi_api_key():
@@ -73,8 +115,8 @@ def run_cmd(cmd):
 
 def parse_datasets_output(output):
     """
-    Parse the JSON lines output from datasets command to extract accession and annotation info.
-    Returns tuple: (accession, has_annotation_info)
+    Parse the JSON lines output from datasets command to extract accession, annotation info, and assembly level.
+    Returns tuple: (accession, has_annotation_info, assembly_level, full_data)
     """
     try:
         lines = output.strip().split("\n")
@@ -84,17 +126,25 @@ def parse_datasets_output(output):
                 # Check for accession at top level first
                 if "accession" in data:
                     has_annotation = "annotation_info" in data
-                    return data["accession"], has_annotation
+                    assembly_level = data.get("assembly_info", {}).get(
+                        "assembly_level", "Unknown"
+                    )
+                    return data["accession"], has_annotation, assembly_level, data
                 # Fallback to reports structure if it exists
                 elif "reports" in data and data["reports"]:
                     accession = data["reports"][0].get("accession")
                     if accession:
                         # Check if annotation_info exists in the first report
                         has_annotation = "annotation_info" in data["reports"][0]
-                        return accession, has_annotation
+                        assembly_level = (
+                            data["reports"][0]
+                            .get("assembly_info", {})
+                            .get("assembly_level", "Unknown")
+                        )
+                        return accession, has_annotation, assembly_level, data
     except (json.JSONDecodeError, KeyError, IndexError):
         pass
-    return None, False
+    return None, False, "Unknown", None
 
 
 def parse_error_message(error_output):
@@ -187,12 +237,30 @@ def search_ncbi_for_accession_with_details(search_term):
     3. Reference genome (not annotated)
     4. Genome (not annotated)
 
-    Returns tuple: (accession, annotation_level, status_message, download_method)
+    Returns tuple: (accession, annotation_level, status_message, download_method, has_annotation, assembly_level)
     """
     # Get API key for rate limiting
     api_key = get_ncbi_api_key()
 
     # Level 1: Annotated reference genome
+    cmd_type = "annotated_reference"
+
+    # Check cache first
+    cached_result = get_cached_result(search_term, cmd_type)
+    if cached_result and "stdout" in cached_result:
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            cached_result["stdout"]
+        )
+        if accession:
+            return (
+                accession,
+                1,
+                "Annotated Reference Genome Available",
+                "datasets_download",
+                has_annotation,
+                assembly_level,
+            )
+
     annotated_ref_cmd = [
         "datasets",
         "summary",
@@ -213,12 +281,24 @@ def search_ncbi_for_accession_with_details(search_term):
         error_output = result.stderr.strip()
         error_status = parse_error_message(error_output)
 
+        # Cache the error result
+        cache_result(
+            search_term, cmd_type, {"error": error_output, "status": error_status}
+        )
+
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None, False
+            return None, None, error_status, None, False, "Unknown"
     else:
+        # Cache the successful result
+        cache_result(
+            search_term, cmd_type, {"stdout": result.stdout, "stderr": result.stderr}
+        )
+
         # Success - parse the JSON output
-        accession, has_annotation = parse_datasets_output(result.stdout)
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            result.stdout
+        )
         if accession:
             return (
                 accession,
@@ -226,9 +306,28 @@ def search_ncbi_for_accession_with_details(search_term):
                 "Annotated Reference Genome Available",
                 "datasets_download",
                 has_annotation,
+                assembly_level,
             )
 
     # Level 2: Annotated genome (non-reference)
+    cmd_type = "annotated"
+
+    # Check cache first
+    cached_result = get_cached_result(search_term, cmd_type)
+    if cached_result and "stdout" in cached_result:
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            cached_result["stdout"]
+        )
+        if accession:
+            return (
+                accession,
+                2,
+                "Annotated Genome Available (Non-Reference)",
+                "datasets_download",
+                has_annotation,
+                assembly_level,
+            )
+
     annotated_cmd = [
         "datasets",
         "summary",
@@ -248,12 +347,24 @@ def search_ncbi_for_accession_with_details(search_term):
         error_output = result.stderr.strip()
         error_status = parse_error_message(error_output)
 
+        # Cache the error result
+        cache_result(
+            search_term, cmd_type, {"error": error_output, "status": error_status}
+        )
+
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None, False
+            return None, None, error_status, None, False, "Unknown"
     else:
+        # Cache the successful result
+        cache_result(
+            search_term, cmd_type, {"stdout": result.stdout, "stderr": result.stderr}
+        )
+
         # Success - parse the JSON output
-        accession, has_annotation = parse_datasets_output(result.stdout)
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            result.stdout
+        )
         if accession:
             return (
                 accession,
@@ -261,9 +372,28 @@ def search_ncbi_for_accession_with_details(search_term):
                 "Annotated Genome Available (Non-Reference)",
                 "datasets_download",
                 has_annotation,
+                assembly_level,
             )
 
     # Level 3: Reference genome (not annotated)
+    cmd_type = "reference"
+
+    # Check cache first
+    cached_result = get_cached_result(search_term, cmd_type)
+    if cached_result and "stdout" in cached_result:
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            cached_result["stdout"]
+        )
+        if accession:
+            return (
+                accession,
+                3,
+                "Reference Genome Available (Not Annotated)",
+                "datasets_download_genome_only",
+                has_annotation,
+                assembly_level,
+            )
+
     reference_cmd = [
         "datasets",
         "summary",
@@ -283,12 +413,24 @@ def search_ncbi_for_accession_with_details(search_term):
         error_output = result.stderr.strip()
         error_status = parse_error_message(error_output)
 
+        # Cache the error result
+        cache_result(
+            search_term, cmd_type, {"error": error_output, "status": error_status}
+        )
+
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None, False
+            return None, None, error_status, None, False, "Unknown"
     else:
+        # Cache the successful result
+        cache_result(
+            search_term, cmd_type, {"stdout": result.stdout, "stderr": result.stderr}
+        )
+
         # Success - parse the JSON output
-        accession, has_annotation = parse_datasets_output(result.stdout)
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            result.stdout
+        )
         if accession:
             return (
                 accession,
@@ -296,9 +438,28 @@ def search_ncbi_for_accession_with_details(search_term):
                 "Reference Genome Available (Not Annotated)",
                 "datasets_download_genome_only",
                 has_annotation,
+                assembly_level,
             )
 
     # Level 4: Genome (not annotated)
+    cmd_type = "genome"
+
+    # Check cache first
+    cached_result = get_cached_result(search_term, cmd_type)
+    if cached_result and "stdout" in cached_result:
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            cached_result["stdout"]
+        )
+        if accession:
+            return (
+                accession,
+                4,
+                "Genome Available (Not Annotated)",
+                "datasets_download_genome_only",
+                has_annotation,
+                assembly_level,
+            )
+
     genome_cmd = [
         "datasets",
         "summary",
@@ -317,19 +478,31 @@ def search_ncbi_for_accession_with_details(search_term):
         error_output = result.stderr.strip()
         error_status = parse_error_message(error_output)
 
+        # Cache the error result
+        cache_result(
+            search_term, cmd_type, {"error": error_output, "status": error_status}
+        )
+
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None, False
+            return None, None, error_status, None, False, "Unknown"
 
         # If it's "no genome data" error, return that status
         if "No Genome Data Available" in error_status:
-            return None, None, error_status, None, False
+            return None, None, error_status, None, False, "Unknown"
 
         # Other errors
-        return None, None, error_status, None, False
+        return None, None, error_status, None, False, "Unknown"
     else:
+        # Cache the successful result
+        cache_result(
+            search_term, cmd_type, {"stdout": result.stdout, "stderr": result.stderr}
+        )
+
         # Success - parse the JSON output
-        accession, has_annotation = parse_datasets_output(result.stdout)
+        accession, has_annotation, assembly_level, _ = parse_datasets_output(
+            result.stdout
+        )
         if accession:
             return (
                 accession,
@@ -337,9 +510,10 @@ def search_ncbi_for_accession_with_details(search_term):
                 "Genome Available (Not Annotated)",
                 "datasets_download_genome_only",
                 has_annotation,
+                assembly_level,
             )
 
-    return None, None, "No Genome Data Available", None, False
+    return None, None, "No Genome Data Available", None, False, "Unknown"
 
 
 def process_single_species(row, rate_limit_lock):
@@ -373,6 +547,7 @@ def process_single_species(row, rate_limit_lock):
                 status_message,
                 download_method,
                 has_annotation,
+                assembly_level,
             ) = search_ncbi_for_accession_with_details(str(term).strip())
             if accession:
                 logger.info(
@@ -393,6 +568,7 @@ def process_single_species(row, rate_limit_lock):
                 "Annotation Level": annotation_level,
                 "Download Method": download_method,
                 "Has Annotation": has_annotation,
+                "Assembly Level": assembly_level,
             },
             accession,
             has_annotation,
@@ -408,6 +584,7 @@ def process_single_species(row, rate_limit_lock):
                 "Annotation Level": "N/A",
                 "Download Method": "N/A",
                 "Has Annotation": False,
+                "Assembly Level": "Unknown",
             },
             None,
             False,
@@ -493,6 +670,7 @@ def main():
                             "Download Method": status["Download Method"],
                             "Species": status["Accepted name"],
                             "Has Annotation": has_annotation,
+                            "Assembly Level": status["Assembly Level"],
                         }
                     )
             completed += 1
@@ -519,6 +697,7 @@ def main():
                 "Download Method",
                 "Species",
                 "Has Annotation",
+                "Assembly Level",
             ]
         ).to_csv(args.download_info, index=False)
 

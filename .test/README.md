@@ -21,10 +21,25 @@ functionality with minimal test data.
 
 ## Test Species
 
-The test includes two species for validation:
+The test includes several species for validation:
 
-- **Homo_sapiens** (Human)
-- **Mus_musculus** (Mouse)
+- **Escherichia coli** - Model bacterial species
+- **Staphylococcus aureus** - Pathogenic bacterial species  
+- **Homo sapiens** (Human) - Reference mammalian species
+- **Mus musculus** (Mouse) - Model mammalian species
+- **Hibiscus mutabilis** - Plant species
+- **Corchorus capsularis** - Plant species
+- **Acer negundo** (Box elder) - **Positive control for chromosome-level assembly**
+- **Ipomoea purpurea** (Morning glory) - **Negative control for scaffold-level assembly**
+
+### Assembly Level Testing
+
+The test includes two control species to validate assembly level detection:
+
+- **Acer negundo**: Expected to have **Chromosome** level assembly
+- **Ipomoea purpurea**: Expected to have **Scaffold** level assembly
+
+This validates that the caching system correctly captures and reports assembly level information from NCBI datasets.
 
 ## How to Run Tests
 
@@ -62,9 +77,9 @@ After running the test, you should see these files in the results/ directory:
 
 Additional intermediate files are created in the resources/ directory:
 
-- **species_status.csv**: Log of which species had reference proteomes available
+- **species_status.csv**: Log of which species had reference proteomes available (includes Assembly Level column)
 - **accessions.txt**: List of NCBI genome accessions for available proteomes
-- **download_info.csv**: Detailed download information for each species
+- **download_info.csv**: Detailed download information for each species (includes Assembly Level column)
 - **proteomes/**: Directory containing downloaded proteome files (compressed)
 - **blast_db/**: Directory containing the BLAST database files
 - **query_shards/**: Directory containing split query files for parallel processing
