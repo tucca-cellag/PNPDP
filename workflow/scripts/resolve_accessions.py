@@ -73,7 +73,8 @@ def run_cmd(cmd):
 
 def parse_datasets_output(output):
     """
-    Parse the JSON lines output from datasets command to extract accession.
+    Parse the JSON lines output from datasets command to extract accession and annotation info.
+    Returns tuple: (accession, has_annotation_info)
     """
     try:
         lines = output.strip().split("\n")
@@ -82,15 +83,18 @@ def parse_datasets_output(output):
                 data = json.loads(line)
                 # Check for accession at top level first
                 if "accession" in data:
-                    return data["accession"]
+                    has_annotation = "annotation_info" in data
+                    return data["accession"], has_annotation
                 # Fallback to reports structure if it exists
                 elif "reports" in data and data["reports"]:
                     accession = data["reports"][0].get("accession")
                     if accession:
-                        return accession
+                        # Check if annotation_info exists in the first report
+                        has_annotation = "annotation_info" in data["reports"][0]
+                        return accession, has_annotation
     except (json.JSONDecodeError, KeyError, IndexError):
         pass
-    return None
+    return None, False
 
 
 def parse_error_message(error_output):
@@ -211,16 +215,17 @@ def search_ncbi_for_accession_with_details(search_term):
 
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None
+            return None, None, error_status, None, False
     else:
         # Success - parse the JSON output
-        accession = parse_datasets_output(result.stdout)
+        accession, has_annotation = parse_datasets_output(result.stdout)
         if accession:
             return (
                 accession,
                 1,
                 "Annotated Reference Genome Available",
                 "datasets_download",
+                has_annotation,
             )
 
     # Level 2: Annotated genome (non-reference)
@@ -245,16 +250,17 @@ def search_ncbi_for_accession_with_details(search_term):
 
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None
+            return None, None, error_status, None, False
     else:
         # Success - parse the JSON output
-        accession = parse_datasets_output(result.stdout)
+        accession, has_annotation = parse_datasets_output(result.stdout)
         if accession:
             return (
                 accession,
                 2,
                 "Annotated Genome Available (Non-Reference)",
                 "datasets_download",
+                has_annotation,
             )
 
     # Level 3: Reference genome (not annotated)
@@ -279,16 +285,17 @@ def search_ncbi_for_accession_with_details(search_term):
 
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None
+            return None, None, error_status, None, False
     else:
         # Success - parse the JSON output
-        accession = parse_datasets_output(result.stdout)
+        accession, has_annotation = parse_datasets_output(result.stdout)
         if accession:
             return (
                 accession,
                 3,
                 "Reference Genome Available (Not Annotated)",
                 "datasets_download_genome_only",
+                has_annotation,
             )
 
     # Level 4: Genome (not annotated)
@@ -312,26 +319,27 @@ def search_ncbi_for_accession_with_details(search_term):
 
         # If it's a taxonomy error, return immediately
         if "Invalid Taxonomy" in error_status or "Not Exact" in error_status:
-            return None, None, error_status, None
+            return None, None, error_status, None, False
 
         # If it's "no genome data" error, return that status
         if "No Genome Data Available" in error_status:
-            return None, None, error_status, None
+            return None, None, error_status, None, False
 
         # Other errors
-        return None, None, error_status, None
+        return None, None, error_status, None, False
     else:
         # Success - parse the JSON output
-        accession = parse_datasets_output(result.stdout)
+        accession, has_annotation = parse_datasets_output(result.stdout)
         if accession:
             return (
                 accession,
                 4,
                 "Genome Available (Not Annotated)",
                 "datasets_download_genome_only",
+                has_annotation,
             )
 
-    return None, None, "No Genome Data Available", None
+    return None, None, "No Genome Data Available", None, False
 
 
 def process_single_species(row, rate_limit_lock):
@@ -348,6 +356,7 @@ def process_single_species(row, rate_limit_lock):
     annotation_level = None
     status_message = None
     download_method = None
+    has_annotation = False
 
     for priority, (label, term) in enumerate(search_priority, 1):
         if pd.notna(term) and str(term).strip():
@@ -358,37 +367,51 @@ def process_single_species(row, rate_limit_lock):
             logger.info(
                 f"Querying NCBI for term='{str(term).strip()}' (prio {priority})"
             )
-            accession, annotation_level, status_message, download_method = (
-                search_ncbi_for_accession_with_details(str(term).strip())
-            )
+            (
+                accession,
+                annotation_level,
+                status_message,
+                download_method,
+                has_annotation,
+            ) = search_ncbi_for_accession_with_details(str(term).strip())
             if accession:
                 logger.info(
-                    f"Found accession {accession} for '{label}' (prio {priority})"
+                    f"Found accession {accession} for '{label}' (prio {priority}) - Has annotation: {has_annotation}"
                 )
                 name_used = label
                 priority_level = priority
                 break
 
     if accession:
-        return {
-            "Accepted name": row.get("Accepted name"),
-            "Status": status_message,
-            "Accession": accession,
-            "Name Used": name_used,
-            "Priority Level": priority_level,
-            "Annotation Level": annotation_level,
-            "Download Method": download_method,
-        }, accession
+        return (
+            {
+                "Accepted name": row.get("Accepted name"),
+                "Status": status_message,
+                "Accession": accession,
+                "Name Used": name_used,
+                "Priority Level": priority_level,
+                "Annotation Level": annotation_level,
+                "Download Method": download_method,
+                "Has Annotation": has_annotation,
+            },
+            accession,
+            has_annotation,
+        )
     else:
-        return {
-            "Accepted name": row.get("Accepted name"),
-            "Status": status_message or "No Reference Proteome Found",
-            "Accession": "N/A",
-            "Name Used": "N/A",
-            "Priority Level": "N/A",
-            "Annotation Level": "N/A",
-            "Download Method": "N/A",
-        }, None
+        return (
+            {
+                "Accepted name": row.get("Accepted name"),
+                "Status": status_message or "No Reference Proteome Found",
+                "Accession": "N/A",
+                "Name Used": "N/A",
+                "Priority Level": "N/A",
+                "Annotation Level": "N/A",
+                "Download Method": "N/A",
+                "Has Annotation": False,
+            },
+            None,
+            False,
+        )
 
 
 def main():
@@ -444,11 +467,23 @@ def main():
 
         # Collect results as they complete
         completed = 0
+        annotated_count = 0
+        unannotated_count = 0
         for future in as_completed(future_to_row):
-            status, accession = future.result()
+            status, accession, has_annotation = future.result()
             statuses.append(status)
             if accession:
-                accessions.append(accession)
+                # Only add to download list if it has annotation info (proteome available)
+                if has_annotation:
+                    accessions.append(accession)
+                    annotated_count += 1
+                    logger.info(f"Added annotated genome {accession} to download list")
+                else:
+                    unannotated_count += 1
+                    logger.info(
+                        f"Found unannotated genome {accession} - not adding to download list"
+                    )
+
                 # Add to download info if it has a valid download method
                 if status.get("Download Method") and status["Download Method"] != "N/A":
                     download_info.append(
@@ -457,12 +492,14 @@ def main():
                             "Annotation Level": status["Annotation Level"],
                             "Download Method": status["Download Method"],
                             "Species": status["Accepted name"],
+                            "Has Annotation": has_annotation,
                         }
                     )
             completed += 1
             if completed % 25 == 0:
                 logger.info(
-                    f"Progress: processed {completed}/{len(species_df)} species"
+                    f"Progress: processed {completed}/{len(species_df)} species "
+                    f"(annotated: {annotated_count}, unannotated: {unannotated_count})"
                 )
 
     pd.DataFrame(statuses).to_csv(args.status, index=False)
@@ -476,12 +513,19 @@ def main():
     else:
         # Create empty download_info.csv file if no annotated genomes found
         pd.DataFrame(
-            columns=["Accession", "Annotation Level", "Download Method", "Species"]
+            columns=[
+                "Accession",
+                "Annotation Level",
+                "Download Method",
+                "Species",
+                "Has Annotation",
+            ]
         ).to_csv(args.download_info, index=False)
 
     logger.info(
-        f"Completed: {len(accessions)} accessions found, "
-        f"{len(species_df) - len(accessions)} not found"
+        f"Completed: {len(accessions)} annotated genomes for download, "
+        f"{unannotated_count} unannotated genomes found (not downloaded), "
+        f"{len(species_df) - len(accessions) - unannotated_count} species with no genome data"
     )
 
 
