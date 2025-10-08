@@ -13,6 +13,7 @@ retries: 3
 rerun-incomplete: true
 jobs: 100 # Slurm jobscript size limit
 latency-wait: 120
+configfile: "config/config.yaml"
 default-resources:
   slurm_partition: "batch"
   slurm_account: "default"

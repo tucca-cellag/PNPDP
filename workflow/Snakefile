@@ -2,17 +2,10 @@ import os
 import yaml
 
 
-# Allow configfile to be overridden via environment variable
-configfile: os.environ.get("SNAKEMAKE_CONFIG", "config/config.yaml")
-
-
-with open(os.environ.get("SNAKEMAKE_CONFIG", "config/config.yaml")) as f:
-    cfg = yaml.safe_load(f)
-
-species_csv = cfg["species_csv"]
-query_fasta = cfg["query_fasta"]
-num_shards = int(cfg.get("num_shards", 8))
-threads_per_blast = int(cfg.get("threads_per_blast", 8))
+species_csv = config["species_csv"]
+query_fasta = config["query_fasta"]
+num_shards = int(config.get("num_shards", 8))
+threads_per_blast = int(config.get("threads_per_blast", 8))
 
 
 rule all:

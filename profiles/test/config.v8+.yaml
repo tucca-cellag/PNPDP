@@ -13,3 +13,4 @@ keep-going: true
 jobs: 100
 latency-wait: 120
 cores: 4
+configfile: ".test/config.yaml"
