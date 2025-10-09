@@ -27,3 +27,17 @@ default-resources:
   # like this workflow to notify you via email of started/failed/completed
   # slurm jobs
   slurm_extra: '"--mail-type=ALL --mail-user=firstname.lastname@tufts.edu"'
+
+# Cluster-specific resource settings for BLAST operations
+# Following Tufts BLAST documentation recommendations
+set-resources:
+  makeblastdb:
+    slurm_partition: "largemem"
+    mem_mb: 64000 # 64GB for large database creation
+    runtime: 2880 # 48 hours for large database creation
+    cpus_per_task: 1 # makeblastdb is single-threaded
+  blastp:
+    slurm_partition: "largemem"
+    mem_mb: 32000 # 32GB for BLAST searches (increased from 16GB)
+    runtime: 1440 # 24 hours for BLAST searches
+    cpus_per_task: 16 # More CPUs for parallel BLAST

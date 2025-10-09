@@ -1,0 +1,10 @@
+name: shell-tools
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  # Minimal environment for basic shell operations
+  # These tools are typically available on most systems
+  # but conda ensures consistency across platforms
+  - bash
+  - coreutils

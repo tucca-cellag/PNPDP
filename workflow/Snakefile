@@ -27,7 +27,7 @@ rule split_queries:
         results_dir=lambda wc, input, output: os.path.dirname(output.done),
         awk_script=lambda wc, input, output: f'BEGIN{{n=0}} /^>/{{f=sprintf("{os.path.dirname(output.done)}/shard_%d.faa",n++%{num_shards});}} {{print > f}}',
     conda:
-        "envs/entrez-blast.yaml"
+        "envs/shell-tools.yaml"
     shell:
         """
         (echo "Starting query splitting..." && \
@@ -146,7 +146,7 @@ rule concat_proteomes:
     params:
         length=lambda wildcards, input: len(input.proteomes),
     conda:
-        "envs/entrez-blast.yaml"
+        "envs/shell-tools.yaml"
     shell:
         """
         (echo "Starting proteome concatenation..." && \
@@ -180,17 +180,18 @@ rule makeblastdb:
         "logs/makeblastdb.log",
     params:
         dbtitle="Custom Species Proteome Database",
-        tmpdir=lambda wc, input, output: os.environ.get("TMPDIR", "/tmp"),
+        tmpdir=lambda wc, input, output: os.environ.get("TMPDIR", "tmp"),
         max_file_size=lambda wc, input, output: config.get(
             "makeblastdb_max_file_size", "4GB"
         ),
-    resources:
-        mem_mb=lambda wildcards, attempt: int(config.get("makeblastdb_mem_mb", 32000)),
     conda:
-        "envs/entrez-blast.yaml"
+        "envs/shell-tools.yaml"
     shell:
         """
         (echo "Starting makeblastdb" && \
+        echo "Purging modules and loading BLAST..." && \
+        module purge && \
+        module load blast/2.17.0 && \
         echo "Input FASTA: {input.fasta}" && \
         echo "TMPDIR: {params.tmpdir}" && \
         export TMPDIR={params.tmpdir} && \
@@ -215,10 +216,13 @@ rule blastp:
     params:
         blast_db_dir=lambda wc, input, output: os.path.dirname(input.dbpin),
     conda:
-        "envs/entrez-blast.yaml"
+        "envs/shell-tools.yaml"
     shell:
         """
         (echo "Starting BLAST search for shard {wildcards.i}" && \
+        echo "Purging modules and loading BLAST..." && \
+        module purge && \
+        module load blast/2.17.0 && \
         echo "Query file: {input.shard}" && \
         echo "Database: {params.blast_db_dir}/species_db" && \
         echo "Output file: {output.tsv}" && \
