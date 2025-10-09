@@ -147,32 +147,33 @@ rule extract_proteome:
 
 rule concat_proteomes:
     input:
-        proteomes=lambda wildcards: expand(
-            "resources/proteomes/{acc}.faa.gz",
-            acc=[
-                line.strip()
-                for line in open("resources/unique_accessions.txt")
-                if line.strip()
-            ],
-        ),
+        unique_accs="resources/unique_accessions.txt",
     output:
         fasta="resources/blast_db/all_species_proteomes.faa",
         done="resources/blast_db/.concat_done",
     log:
         "logs/concat_proteomes.log",
-    params:
-        length=lambda wildcards, input: len(input.proteomes),
     conda:
         "envs/shell-tools.yaml"
     shell:
         """
         (echo "Starting proteome concatenation..." && \
         mkdir -p "resources/blast_db" && \
-        echo "Concatenating {params.length} proteome files..." && \
-        for proteome in {input.proteomes}; do \
+        echo "Reading unique accessions from {input.unique_accs}..." && \
+        acc_count=0 && \
+        while read -r acc; do \
+            if [ -n "$acc" ]; then \
+                proteome="resources/proteomes/$acc.faa.gz" && \
+                if [ -f "$proteome" ]; then \
             echo "Processing: $proteome" && \
-            gunzip -c "$proteome" >> {output.fasta}; \
-        done && \
+                    gunzip -c "$proteome" >> {output.fasta} && \
+                    acc_count=$((acc_count + 1)) && \
+                else \
+                    echo "Warning: $proteome not found, skipping" && \
+                fi && \
+            fi && \
+        done < {input.unique_accs} && \
+        echo "Concatenated $acc_count proteome files" && \
         echo "Creating completion flag..." && \
         touch {output.done} && \
         echo "Proteome concatenation completed") 2> {log}
