@@ -2,6 +2,10 @@ import os
 import yaml
 
 
+# Include common functions
+include: "rules/common.smk"
+
+
 species_csv = config["species_csv"]
 query_fasta = config["query_fasta"]
 num_shards = int(config.get("num_shards", 8))
@@ -71,7 +75,7 @@ checkpoint resolve_accessions:
         """
 
 
-rule deduplicate_accessions:
+checkpoint deduplicate_accessions:
     input:
         accs="resources/accessions.txt",
     output:
@@ -147,33 +151,25 @@ rule extract_proteome:
 
 rule concat_proteomes:
     input:
-        unique_accs="resources/unique_accessions.txt",
+        proteomes=get_proteome_files,
     output:
         fasta="resources/blast_db/all_species_proteomes.faa",
         done="resources/blast_db/.concat_done",
     log:
         "logs/concat_proteomes.log",
+    params:
+        num_files=lambda wc, input, output: len(input.proteomes),
     conda:
         "envs/shell-tools.yaml"
     shell:
         """
         (echo "Starting proteome concatenation..." && \
         mkdir -p "resources/blast_db" && \
-        echo "Reading unique accessions from {input.unique_accs}..." && \
-        acc_count=0 && \
-        while read -r acc; do \
-            if [ -n "$acc" ]; then \
-                proteome="resources/proteomes/$acc.faa.gz" && \
-                if [ -f "$proteome" ]; then \
+        echo "Concatenating {params.num_files} proteome files..." && \
+        for proteome in {input.proteomes}; do \
                     echo "Processing: $proteome" && \
-                    gunzip -c "$proteome" >> {output.fasta} && \
-                    acc_count=$((acc_count + 1)) && \
-                else \
-                    echo "Warning: $proteome not found, skipping" && \
-                fi && \
-            fi && \
-        done < {input.unique_accs} && \
-        echo "Concatenated $acc_count proteome files" && \
+            gunzip -c "$proteome" >> {output.fasta}; \
+        done && \
         echo "Creating completion flag..." && \
         touch {output.done} && \
         echo "Proteome concatenation completed") 2> {log}
