@@ -199,7 +199,7 @@ rule makeblastdb:
         ulimit -v unlimited || true && \
         makeblastdb -in {input.fasta} -dbtype prot -out resources/blast_db/species_db \
             -input_type fasta -blastdb_version 5 -parse_seqids -title "{params.dbtitle}" \
-            -max_file_size {params.max_file_size} && \
+            -max_file_sz {params.max_file_size} && \
         echo "makeblastdb completed") &> {log}
         """
 
