@@ -18,6 +18,7 @@ def main():
 
     if not os.path.exists(args.blast) or os.path.getsize(args.blast) == 0:
         num_species_with_hits = 0
+        num_unique_proteins_with_hits = 0
         species_with_hits = pd.DataFrame([{"Accepted name": s} for s in []])
     else:
         cols = [
@@ -39,16 +40,24 @@ def main():
         df["species_name"] = (
             df["subject_title"].str.extract(r"\[(.*?)\]").fillna("Unknown")
         )
+
+        # Count unique species with hits
         num_species_with_hits = df[df["species_name"] != "Unknown"][
             "species_name"
         ].nunique()
+
+        # Count unique proteins (query sequences) with hits
+        num_unique_proteins_with_hits = df["query_id"].nunique()
+
         species_with_hits = pd.DataFrame(
             df["species_name"].unique(), columns=["Accepted name"]
         )
 
     status_df = pd.read_csv(args.status)
+    # Count species that have proteomes available
+    # This includes species with annotated genomes OR those downloaded with datasets_download method
     proteomes_downloaded = len(
-        status_df[status_df["Status"].str.contains("Proteome", na=False)]
+        status_df[(status_df["Download Method"] == "datasets_download")]
     )
 
     summary = (
@@ -57,6 +66,7 @@ def main():
         f"2. Species with a Reference Proteome Found: {proteomes_downloaded} "
         f"({proteomes_downloaded/total_species:.2%})\n"
         f"3. Species with at least one BLASTp Hit: {num_species_with_hits}\n"
+        f"4. Unique Proteins with BLASTp Hits: {num_unique_proteins_with_hits}\n"
     )
 
     with open(args.summary, "w") as f:
