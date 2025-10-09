@@ -179,11 +179,28 @@ rule makeblastdb:
     log:
         "logs/makeblastdb.log",
     params:
-        '-input_type fasta -blastdb_version 5 -title "Custom Species Proteome Database"',
+        dbtitle="Custom Species Proteome Database",
+        tmpdir=lambda wc, input, output: os.environ.get("TMPDIR", "/tmp"),
+        max_file_size=lambda wc, input, output: config.get(
+            "makeblastdb_max_file_size", "4GB"
+        ),
+    resources:
+        mem_mb=lambda wildcards, attempt: int(config.get("makeblastdb_mem_mb", 32000)),
     conda:
         "envs/entrez-blast.yaml"
-    wrapper:
-        "v7.6.1/bio/blast/makeblastdb"
+    shell:
+        """
+        (echo "Starting makeblastdb" && \
+        echo "Input FASTA: {input.fasta}" && \
+        echo "TMPDIR: {params.tmpdir}" && \
+        export TMPDIR={params.tmpdir} && \
+        # Ensure sufficient virtual memory address space for BLAST v5 LMDB
+        ulimit -v unlimited || true && \
+        makeblastdb -in {input.fasta} -dbtype prot -out resources/blast_db/species_db \
+            -input_type fasta -blastdb_version 5 -parse_seqids -title "{params.dbtitle}" \
+            -max_file_size {params.max_file_size} && \
+        echo "makeblastdb completed") &> {log}
+        """
 
 
 rule blastp:
