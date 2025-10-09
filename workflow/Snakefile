@@ -165,7 +165,7 @@ rule concat_proteomes:
             if [ -n "$acc" ]; then \
                 proteome="resources/proteomes/$acc.faa.gz" && \
                 if [ -f "$proteome" ]; then \
-            echo "Processing: $proteome" && \
+                    echo "Processing: $proteome" && \
                     gunzip -c "$proteome" >> {output.fasta} && \
                     acc_count=$((acc_count + 1)) && \
                 else \
