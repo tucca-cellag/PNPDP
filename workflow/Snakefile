@@ -71,9 +71,28 @@ checkpoint resolve_accessions:
         """
 
 
-rule datasets_download_proteome:
+rule deduplicate_accessions:
     input:
         accs="resources/accessions.txt",
+    output:
+        unique_accs="resources/unique_accessions.txt",
+    log:
+        "logs/deduplicate_accessions.log",
+    conda:
+        "envs/shell-tools.yaml"
+    shell:
+        """
+        (echo "Starting accession deduplication..." && \
+        echo "Input accessions: $(wc -l < {input.accs})" && \
+        sort {input.accs} | uniq > {output.unique_accs} && \
+        echo "Unique accessions: $(wc -l < {output.unique_accs})" && \
+        echo "Deduplication completed") 2> {log}
+        """
+
+
+rule datasets_download_proteome:
+    input:
+        accs="resources/unique_accessions.txt",
         download_info="resources/download_info.csv",
     output:
         dataset_zip="resources/proteome_zips/{acc}.zip",
@@ -132,9 +151,7 @@ rule concat_proteomes:
             "resources/proteomes/{acc}.faa.gz",
             acc=[
                 line.strip()
-                for line in open(
-                    checkpoints.resolve_accessions.get().output.accessions
-                )
+                for line in open("resources/unique_accessions.txt")
                 if line.strip()
             ],
         ),

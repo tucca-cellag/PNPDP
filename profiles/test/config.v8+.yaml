@@ -15,5 +15,5 @@ latency-wait: 120
 cores: 4
 # NCBI API rate limiting: 10 jobs/second (with API key)
 # If you don't have an API key, change to 5/1s to avoid rate limiting
-max-jobs-per-timespan: 10/1s
+max-jobs-per-timespan: 7/1s
 configfile: ".test/config.yaml"
