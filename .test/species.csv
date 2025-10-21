@@ -1,11 +1,21 @@
-species_name,Accepted name,Legacy Name,Genus
-Escherichia_coli,Escherichia coli,Escherichia coli,Escherichia
-Staphylococcus_aureus,Staphylococcus aureus,Staphylococcus aureus,Staphylococcus
-Homo_sapiens,Homo sapiens,Homo sapiens,Homo
-Mus_musculus,Mus musculus,Mus musculus,Mus
-Hibiscus mutabilis,Hibiscus mutabilis,Hibiscus mutabilis,Hibiscus
-Corchorus capsularis,Corchorus capsularis,Corchorus capsularis,Corchorus
-Corchorus capsaris,Corchorus capsaris,Corchorus capsaris,Corchorus
-Coorus capsaris,Coorus capsaris,Coorus capsaris,Coorus
-Acer_negundo,Acer negundo,Box elder,Acer
-Ipomoea_purpurea,Ipomoea purpurea,Morning glory,Ipomoea
+cell_line,Accepted name,Legacy Name,Genus
+CU-06241-F1,Centaurea uniflora,Centaurea uniflora,Centaurea
+AL-02656-F1,Aloinopsis lodewykii,Aloinopsis lodewykii,Aloinopsis
+GL-14374 C1,Glycyrrhiza lepidota,Glycyrrhiza lepidota,Glycrrhiza
+FA-13037 C1,Festuca ampla,Festuca ampla,Festuca
+ET-04771-F2,Eryngium x tripartitum,Eryngium tripartitum,Eryngium
+CS-04588-F2,Columnea sanguinea,Columnea sanguinea,Columnea
+TP-02961,Cascabela thevetia,Thevetia peruviana,Cascabela
+SO-14158 R1 C1,Spinacia oleracea,Spinacia oleracea,Spinacia
+CC-01902-R0,Campanula cenisia,Campanula cenisia,Campanula
+VH-05614-F2,Vicia hirsuta,Vicia hirsuta,Vicia
+OS-04468-R3,Oxalis spiralis,Oxalis spiralis,Oxalis
+AP-12607,Ammoselinum popei,Ammoselinum popei,Ammoselinum
+CM-01939-F1,Amberboa moschata,Centaurea moschata,Amberboa
+CS-02260-F3,Campanula sarmatica,Campanula sarmatica,Campanula
+CC-06559-F2,Erigeron canadensis,Conyza canadensis,Erigeron
+ES-04817-F5,Eucalyptus Subcrenulata,Eucalyptus Subcrenulata,Eucalyptus
+SS-12354 C1,Sansevieria senegambica,Sansevieria senegambica,Sansevieria
+ZM-11117,Zamia muricata,Zamia muricata,Zamia
+AS-06638-F2,Aloinopsis schooneesii,Aloinopsis schoonesii,Aloinopsis
+TS-06439-L1,Teucrium scorodonia,Teucrium scorodonia,Teucrium

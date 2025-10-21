@@ -48,15 +48,18 @@ rule extract_genome_data:
     log:
         "logs/extract/{acc}.log",
     conda:
-        "../envs/ncbi-datasets.yaml"
+        "../envs/shell-tools.yaml"
     message:
         "Extracting genome data for NCBI accession: {wildcards.acc}"
     shell:
         """
         (echo "Starting extraction for {wildcards.acc}" && \
         mkdir -pv ./resources/genomes/ ./resources/gff3/ ./resources/gbff/ ./resources/cds/ ./resources/seq_reports/ && \
+        echo "Determining assembly name from metadata..." && \
+        ASSEMBLY_NAME=$(unzip -p {input.dataset_zip} ncbi_dataset/data/assembly_data_report.jsonl | jq -r '.assemblyInfo.assemblyName') && \
+        echo "Assembly name: $ASSEMBLY_NAME" && \
         echo "Extracting genomic sequences..." && \
-        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/genomic.fna | \
+        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/{wildcards.acc}_${{ASSEMBLY_NAME}}_genomic.fna | \
         gzip > {output.genome} && \
         echo "Extracting GFF3 annotation..." && \
         unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/genomic.gff | \
@@ -68,7 +71,7 @@ rule extract_genome_data:
         unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/cds_from_genomic.fna | \
         gzip > {output.cds} && \
         echo "Extracting sequence report..." && \
-        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/sequence_report.txt > {output.seq_report} && \
+        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/sequence_report.jsonl > {output.seq_report} && \
         echo "Extraction completed for {wildcards.acc}") &> {log}
         """
 
@@ -77,7 +80,10 @@ rule download_complete:
     input:
         genomes=expand(
             "resources/genomes/{acc}.fna.gz",
-            acc=lambda wc: checkpoints.resolve_accessions.get().output.accessions,
+            acc=lambda wc: open(checkpoints.resolve_accessions.get().output.accessions)
+            .read()
+            .strip()
+            .split("\n"),
         ),
     output:
         "resources/genomes/.download_complete",

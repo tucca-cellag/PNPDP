@@ -12,6 +12,7 @@ include: "rules/data_preparation.smk"
 include: "rules/download_extract.smk"
 include: "rules/seqfu.smk"
 include: "rules/seqkit.smk"
+include: "rules/quast.smk"
 
 
 rule all:
@@ -19,3 +20,5 @@ rule all:
         # Genome download and assembly statistics
         "resources/genomes/.download_complete",
         "results/qc/.stats_complete",
+        # QUAST quality assessment
+        "results/qc/quast/.quast_complete",

@@ -39,11 +39,17 @@ rule stats_complete:
     input:
         seqfu_stats=expand(
             "results/qc/seqfu/{acc}.seqfu.stats.tsv",
-            acc=lambda wc: checkpoints.resolve_accessions.get().output.accessions,
+            acc=lambda wc: open(checkpoints.resolve_accessions.get().output.accessions)
+            .read()
+            .strip()
+            .split("\n"),
         ),
         seqkit_stats=expand(
             "results/qc/seqkit/{acc}.seqkit.stats.tsv",
-            acc=lambda wc: checkpoints.resolve_accessions.get().output.accessions,
+            acc=lambda wc: open(checkpoints.resolve_accessions.get().output.accessions)
+            .read()
+            .strip()
+            .split("\n"),
         ),
     output:
         "results/qc/.stats_complete",

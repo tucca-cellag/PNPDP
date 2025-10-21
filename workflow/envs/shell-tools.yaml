@@ -8,3 +8,5 @@ dependencies:
   # but conda ensures consistency across platforms
   - bash
   - coreutils
+  - unzip
+  - jq
