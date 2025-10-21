@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""
+Aggregate and analyze BLAST results from proteome searches.
+
+This script processes BLAST results from proteome searches against species
+genomes and generates summary statistics. It counts species with proteomes
+available, species with BLAST hits, and unique proteins with hits. The
+script outputs a summary report and a list of species that had successful
+BLAST matches for further analysis.
+"""
 import argparse
 import os
 import pandas as pd

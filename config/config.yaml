@@ -9,3 +9,7 @@ threads_per_blast: 8 # Number of CPUs per BLAST job
 # Species resolution (NCBI API calls)
 resolve_accessions_threads: 5 # Conservative for API rate limits
 
+# PlantiSMASH settings
+plantismash_threads: 4 # Number of CPUs per plantiSMASH analysis job
+run_coverage_analysis: true # Whether to run plantiSMASH coverage analysis against pre-calculated BGCs
+

@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+"""
+Resolve NCBI genome accessions for species list.
+
+This script searches NCBI's genome database for each species in the input CSV file
+and resolves the best available genome accession. It implements a hierarchical
+search strategy prioritizing annotated reference genomes, then annotated genomes,
+reference genomes, and finally any available genome. The script outputs status
+information, accession lists, and download metadata for downstream processing.
+
+Features:
+- Multi-threaded processing with rate limiting
+- Caching system to avoid redundant API calls
+- Hierarchical genome quality ranking
+- Support for NCBI API key for higher rate limits
+- Retry logic for transient network errors
+"""
 import argparse
 import subprocess
 import time

@@ -1,0 +1,7 @@
+name: seqfu
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - seqfu=1.22.3
+  - python>=3.8

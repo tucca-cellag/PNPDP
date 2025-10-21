@@ -1,3 +1,11 @@
+# Global variables and configuration
+species_csv = config["species_csv"]
+query_fasta = config["query_fasta"]
+num_shards = int(config.get("num_shards", 8))
+threads_per_blast = int(config.get("threads_per_blast", 8))
+ncbi_api_key = os.environ.get("NCBI_API_KEY")
+
+
 def get_proteome_files(wildcards):
     """Get list of proteome files from unique accessions"""
     # Use checkpoint to ensure proper re-evaluation
