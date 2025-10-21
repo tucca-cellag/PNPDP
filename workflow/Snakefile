@@ -12,22 +12,10 @@ include: "rules/data_preparation.smk"
 include: "rules/download_extract.smk"
 include: "rules/seqfu.smk"
 include: "rules/seqkit.smk"
-include: "rules/blast.smk"
-include: "rules/analysis.smk"
-
-
-# include: "rules/plantismash.smk"
 
 
 rule all:
     input:
-        "results/analysis_summary.txt",
-        #"resources/plantismash_databases/.download_done",
-        #*(
-        #    [
-        #        "results/plantismash_coverage_analysis.csv",
-        #        "results/plantismash_coverage_stats.txt",
-        #    ]
-        #    if config.get("run_coverage_analysis", True)
-        #    else []
-        #),
+        # Genome download and assembly statistics
+        "resources/genomes/.download_complete",
+        "results/qc/.stats_complete",

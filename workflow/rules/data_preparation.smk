@@ -11,7 +11,7 @@ checkpoint resolve_accessions:
         download_info="resources/download_info.csv",
     log:
         "logs/resolve_accessions.log",
-    threads: lambda wc, input: int(config.get("resolve_accessions_threads", 3))
+    threads: 3
     conda:
         "../envs/ncbi-datasets.yaml"
     shell:

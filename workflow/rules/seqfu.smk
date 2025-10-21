@@ -33,3 +33,25 @@ rule seqfu_assembly_stats:
             > {output.stats} 2> {log} && \
         echo "SeqFu2 statistics completed for {wildcards.acc}") &> {log}
         """
+
+
+rule stats_complete:
+    input:
+        seqfu_stats=expand(
+            "results/qc/seqfu/{acc}.seqfu.stats.tsv",
+            acc=lambda wc: checkpoints.resolve_accessions.get().output.accessions,
+        ),
+        seqkit_stats=expand(
+            "results/qc/seqkit/{acc}.seqkit.stats.tsv",
+            acc=lambda wc: checkpoints.resolve_accessions.get().output.accessions,
+        ),
+    output:
+        "results/qc/.stats_complete",
+    log:
+        "logs/stats_complete.log",
+    conda:
+        "../envs/shell-tools.yaml"
+    shell:
+        """
+        (touch {output}) &> {log}
+        """

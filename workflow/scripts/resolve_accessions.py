@@ -631,7 +631,7 @@ def main():
     args = parser.parse_args()
 
     Path("results").mkdir(parents=True, exist_ok=True)
-    Path("resources/proteomes").mkdir(parents=True, exist_ok=True)
+    Path("resources/genomes").mkdir(parents=True, exist_ok=True)
     logger.info("Ensured output directories exist")
 
     logger.info(f"Reading species CSV: {args.species}")
@@ -666,7 +666,7 @@ def main():
             status, accession, has_annotation = future.result()
             statuses.append(status)
             if accession:
-                # Only add to download list if it has annotation info (proteome available)
+                # Only add annotated genomes to download list for BGC discovery
                 if has_annotation:
                     accessions.append(accession)
                     annotated_count += 1

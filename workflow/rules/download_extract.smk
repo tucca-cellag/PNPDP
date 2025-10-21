@@ -3,8 +3,7 @@
 
 rule datasets_download_genome_data:
     input:
-        accs="resources/unique_accessions.txt",
-        download_info="resources/download_info.csv",
+        csv=species_csv,
     output:
         dataset_zip="resources/dataset_zips/{acc}.zip",
     wildcard_constraints:
@@ -25,7 +24,7 @@ rule datasets_download_genome_data:
         mkdir -pv ./resources/dataset_zips/ && \
         echo "Downloading genome data package..." && \
         datasets download genome accession {wildcards.acc} \
-            --include genome,protein,gff3,gbff,cds,seq-report \
+            --include genome,gff3,gbff,cds,seq-report \
             --annotated \
             --no-progressbar \
             --debug \
@@ -39,7 +38,6 @@ rule extract_genome_data:
     input:
         dataset_zip="resources/dataset_zips/{acc}.zip",
     output:
-        proteome="resources/proteomes/{acc}.faa.gz",
         genome="resources/genomes/{acc}.fna.gz",
         gff3="resources/gff3/{acc}.gff3.gz",
         gbff="resources/gbff/{acc}.gbff.gz",
@@ -56,10 +54,7 @@ rule extract_genome_data:
     shell:
         """
         (echo "Starting extraction for {wildcards.acc}" && \
-        mkdir -pv ./resources/proteomes/ ./resources/genomes/ ./resources/gff3/ ./resources/gbff/ ./resources/cds/ ./resources/seq_reports/ && \
-        echo "Extracting protein sequences..." && \
-        unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/protein.faa | \
-        gzip > {output.proteome} && \
+        mkdir -pv ./resources/genomes/ ./resources/gff3/ ./resources/gbff/ ./resources/cds/ ./resources/seq_reports/ && \
         echo "Extracting genomic sequences..." && \
         unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/genomic.fna | \
         gzip > {output.genome} && \
@@ -75,4 +70,22 @@ rule extract_genome_data:
         echo "Extracting sequence report..." && \
         unzip -p {input.dataset_zip} ncbi_dataset/data/{wildcards.acc}/sequence_report.txt > {output.seq_report} && \
         echo "Extraction completed for {wildcards.acc}") &> {log}
+        """
+
+
+rule download_complete:
+    input:
+        genomes=expand(
+            "resources/genomes/{acc}.fna.gz",
+            acc=lambda wc: checkpoints.resolve_accessions.get().output.accessions,
+        ),
+    output:
+        "resources/genomes/.download_complete",
+    log:
+        "logs/download_complete.log",
+    conda:
+        "../envs/shell-tools.yaml"
+    shell:
+        """
+        (touch {output}) &> {log}
         """

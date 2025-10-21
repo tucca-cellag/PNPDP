@@ -221,6 +221,8 @@ workflow/notebooks/.ipynb_checkpoints/**
 **/Rplots.pdf
 
 # Project
+.DS_Store
 *.xlsx
 .vscode/settings.json
 cache/**
+
